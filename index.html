@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 4 - Go And Go Until You Die</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Outfit:wght@400;600;800&display=swap');
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            user-select: none;
+            overflow: hidden;
+            background-color: #0b0c10;
+            color: #e0e6ed;
+        }
+
+        .title-font {
+            font-family: 'Cinzel', serif;
+        }
+
+        /* Glassmorphic Panes */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        .glass-button {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.2s ease-in-out;
+        }
+
+        .glass-button:hover {
+            background: rgba(51, 65, 85, 0.9);
+            border-color: #38bdf8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
+        }
+
+        .glass-button:active {
+            transform: translateY(0);
+        }
+
+        /* Animated Progress Bars */
+        .bar-fill {
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        /* Crosshair */
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        .crosshair::before, .crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.6);
+        }
+        .crosshair::before { top: 4px; left: 0; width: 10px; height: 2px; }
+        .crosshair::after { top: 0; left: 4px; width: 2px; height: 10px; }
+
+        /* Pulse glow for hole warnings */
+        @keyframes holePulse {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .hole-danger {
+            animation: holePulse 1.5s infinite;
+        }
+    </style>
+</head>
+<body class="relative w-screen h-screen m-0 p-0 overflow-hidden select-none bg-slate-950">
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 w-full h-full z-0"></div>
+
+    <!-- First Person Crosshair -->
+    <div id="crosshair" class="crosshair hidden z-10"></div>
+
+    <!-- HUD Overlay -->
+    <div id="hud" class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 md:p-6">
+        
+        <!-- Top Bar Header -->
+        <div class="flex justify-between items-start gap-4 w-full">
+            <!-- Player Stats Header -->
+            <div class="glass-panel rounded-xl p-4 w-72 md:w-80 pointer-events-auto">
+                <div class="flex items-center justify-between mb-2">
+                    <div>
+                        <h2 id="player-name" class="font-bold text-lg text-amber-400 title-font tracking-wide">Step Toe Kid</h2>
+                        <span id="player-class" class="text-xs text-slate-400 font-semibold uppercase">Explorer Class</span>
+                    </div>
+                    <div class="bg-amber-500/20 border border-amber-500/40 text-amber-300 px-2.5 py-1 rounded-lg text-sm font-bold">
+                        LVL <span id="player-level">1</span>
+                    </div>
+                </div>
+
+                <!-- HP Bar -->
+                <div class="mb-2">
+                    <div class="flex justify-between text-xs font-semibold mb-1">
+                        <span class="text-rose-400"><i class="fa-solid fa-heart mr-1"></i>Health</span>
+                        <span class="text-slate-300"><span id="hp-val">100</span>/<span id="hp-max">100</span></span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                        <div id="hp-bar" class="h-full bg-gradient-to-r from-rose-600 to-red-500 bar-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- Stamina Bar -->
+                <div class="mb-2">
+                    <div class="flex justify-between text-xs font-semibold mb-1">
+                        <span class="text-emerald-400"><i class="fa-solid fa-bolt mr-1"></i>Stamina</span>
+                        <span class="text-slate-300"><span id="stamina-val">100</span>/<span id="stamina-max">100</span></span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                        <div id="stamina-bar" class="h-full bg-gradient-to-r from-emerald-600 to-teal-400 bar-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- XP Bar -->
+                <div>
+                    <div class="flex justify-between text-xs font-semibold mb-1">
+                        <span class="text-sky-400"><i class="fa-solid fa-star mr-1"></i>EXP</span>
+                        <span class="text-slate-300"><span id="xp-val">0</span>/<span id="xp-max">100</span></span>
+                    </div>
+                    <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                        <div id="xp-bar" class="h-full bg-gradient-to-r from-sky-500 to-indigo-500 bar-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Title & Subtitle Banner (Desktop) -->
+            <div class="hidden lg:flex flex-col items-center glass-panel px-6 py-3 rounded-xl border border-amber-500/30 text-center">
+                <h1 class="title-font text-xl font-black text-amber-400 tracking-wider">CHAPTER 4: GO AND GO UNTIL YOU DIE</h1>
+                <p class="text-xs text-slate-400 italic">From the creations of Death Comes Alive And The Rages Band</p>
+            </div>
+
+            <!-- Mini Map Container -->
+            <div class="glass-panel rounded-xl p-2 pointer-events-auto flex flex-col items-center relative">
+                <div class="text-xs font-bold text-slate-400 mb-1 flex items-center gap-1">
+                    <i class="fa-solid fa-compass text-amber-400"></i> RADAR
+                </div>
+                <canvas id="minimap" width="130" height="130" class="rounded-lg bg-slate-900 border border-slate-700"></canvas>
+            </div>
+        </div>
+
+        <!-- Active Quest Display & Quick Prompts -->
+        <div class="flex justify-between items-end w-full">
+            <!-- Active Quest Tracker -->
+            <div class="glass-panel rounded-xl p-4 w-80 pointer-events-auto">
+                <div class="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider mb-2">
+                    <i class="fa-solid fa-scroll"></i> Active Quest
+                </div>
+                <div id="quest-title" class="font-bold text-slate-200 text-sm mb-1">Talk to Parents</div>
+                <p id="quest-desc" class="text-xs text-slate-400 leading-relaxed mb-2">Speak with Step Toe Parents before they leave for Jakarta.</p>
+                <div class="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-md inline-block font-mono">
+                    Target: <span id="quest-target">Step Toe Parents</span>
+                </div>
+            </div>
+
+            <!-- Action Prompt Popup -->
+            <div id="action-prompt" class="hidden glass-panel px-6 py-3 rounded-xl border-amber-500/50 text-amber-300 font-bold text-sm animate-bounce flex items-center gap-3">
+                <span class="bg-amber-500 text-slate-950 px-2 py-0.5 rounded text-xs">E</span>
+                <span id="prompt-text">Interact</span>
+            </div>
+
+            <!-- Quick Access Menu Buttons -->
+            <div class="flex gap-2 pointer-events-auto">
+                <button id="btn-camera" class="glass-button p-3 rounded-xl text-slate-200 text-sm flex items-center gap-2 font-semibold">
+                    <i class="fa-solid fa-camera"></i> <span class="hidden md:inline">View (V)</span>
+                </button>
+                <button id="btn-inventory" class="glass-button p-3 rounded-xl text-slate-200 text-sm flex items-center gap-2 font-semibold">
+                    <i class="fa-solid fa-bag-shopping"></i> <span class="hidden md:inline">Items (I)</span>
+                </button>
+                <button id="btn-skills" class="glass-button p-3 rounded-xl text-slate-200 text-sm flex items-center gap-2 font-semibold">
+                    <i class="fa-solid fa-sitemap"></i> <span class="hidden md:inline">Skills (K)</span>
+                </button>
+                <button id="btn-story" class="glass-button p-3 rounded-xl text-amber-400 text-sm flex items-center gap-2 font-semibold">
+                    <i class="fa-solid fa-book-open"></i> <span class="hidden md:inline">Story & Lore</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dialogue Modal -->
+    <div id="modal-dialogue" class="hidden absolute inset-0 z-30 flex items-end justify-center pb-12 bg-black/40 backdrop-blur-sm pointer-events-auto p-4">
+        <div class="glass-panel max-w-2xl w-full rounded-2xl p-6 border-amber-500/40 relative shadow-2xl">
+            <div class="flex items-center gap-4 mb-3">
+                <div class="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-400 flex items-center justify-center text-amber-400 text-xl font-bold">
+                    <i class="fa-solid fa-user-shield"></i>
+                </div>
+                <div>
+                    <h3 id="dialogue-speaker" class="font-bold text-amber-400 text-lg title-font">Step Toe Parent</h3>
+                    <p class="text-xs text-slate-400">Home Guardian</p>
+                </div>
+            </div>
+            <p id="dialogue-text" class="text-slate-200 text-sm leading-relaxed mb-6 italic bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+                "You there kids around the backyard! I want you to discipline yourself. Always know the steps you walk..."
+            </p>
+            <div class="flex justify-end gap-3">
+                <button id="btn-dialogue-next" class="glass-button px-6 py-2.5 rounded-xl text-amber-300 text-sm font-bold bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40">
+                    Continue <i class="fa-solid fa-arrow-right ml-1"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory Modal -->
+    <div id="modal-inventory" class="hidden absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 pointer-events-auto">
+        <div class="glass-panel max-w-xl w-full rounded-2xl p-6 border-slate-700 flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center pb-4 border-b border-slate-800">
+                <h3 class="text-amber-400 font-bold text-lg title-font flex items-center gap-2">
+                    <i class="fa-solid fa-box-archive"></i> Backpack & Inventory
+                </h3>
+                <button class="btn-close-modal text-slate-400 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="inventory-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 my-4 overflow-y-auto pr-1">
+                <!-- Dynamic Item Cards -->
+            </div>
+            <div class="mt-auto pt-3 border-t border-slate-800 text-xs text-slate-400 text-center">
+                Collected lost items can unlock skills and complete side quests.
+            </div>
+        </div>
+    </div>
+
+    <!-- Skill Tree Modal -->
+    <div id="modal-skills" class="hidden absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 pointer-events-auto">
+        <div class="glass-panel max-w-xl w-full rounded-2xl p-6 border-slate-700 flex flex-col">
+            <div class="flex justify-between items-center pb-4 border-b border-slate-800">
+                <h3 class="text-amber-400 font-bold text-lg title-font flex items-center gap-2">
+                    <i class="fa-solid fa-sitemap"></i> Survival Skills Tree
+                </h3>
+                <button class="btn-close-modal text-slate-400 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-4 my-4">
+                <!-- Skill 1 -->
+                <div class="glass-panel p-4 rounded-xl flex items-center justify-between border-slate-800 hover:border-slate-700">
+                    <div class="flex items-center gap-3">
+                        <div class="p-3 bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 rounded-xl text-xl">
+                            <i class="fa-solid fa-shoe-prints"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-slate-200 text-sm">Light Step</h4>
+                            <p class="text-xs text-slate-400">Takes 50% less damage when stepping near hazard edges.</p>
+                        </div>
+                    </div>
+                    <button id="skill-lightstep-btn" onclick="game.unlockSkill('lightStep')" class="glass-button px-4 py-2 rounded-lg text-xs font-bold text-amber-400 border-amber-500/40">
+                        Unlock (1 SP)
+                    </button>
+                </div>
+                <!-- Skill 2 -->
+                <div class="glass-panel p-4 rounded-xl flex items-center justify-between border-slate-800 hover:border-slate-700">
+                    <div class="flex items-center gap-3">
+                        <div class="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 rounded-xl text-xl">
+                            <i class="fa-solid fa-person-running"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-slate-200 text-sm">High Leap</h4>
+                            <p class="text-xs text-slate-400">Increases jump power by 35% to clear wide pit holes easily.</p>
+                        </div>
+                    </div>
+                    <button id="skill-highleap-btn" onclick="game.unlockSkill('highLeap')" class="glass-button px-4 py-2 rounded-lg text-xs font-bold text-amber-400 border-amber-500/40">
+                        Unlock (1 SP)
+                    </button>
+                </div>
+                <!-- Skill 3 -->
+                <div class="glass-panel p-4 rounded-xl flex items-center justify-between border-slate-800 hover:border-slate-700">
+                    <div class="flex items-center gap-3">
+                        <div class="p-3 bg-amber-500/20 border border-amber-500/40 text-amber-400 rounded-xl text-xl">
+                            <i class="fa-solid fa-eye"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-slate-200 text-sm">Parental Advice Awareness</h4>
+                            <p class="text-xs text-slate-400">Highlights dangerous holes with bright glowing danger rings.</p>
+                        </div>
+                    </div>
+                    <button id="skill-awareness-btn" onclick="game.unlockSkill('awareness')" class="glass-button px-4 py-2 rounded-lg text-xs font-bold text-amber-400 border-amber-500/40">
+                        Unlock (2 SP)
+                    </button>
+                </div>
+            </div>
+            <div class="mt-auto pt-3 border-t border-slate-800 flex justify-between items-center text-xs">
+                <span class="text-slate-400">Available Skill Points: <span id="sp-count" class="text-amber-400 font-bold">1</span></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Story & Moral Lesson Modal -->
+    <div id="modal-story" class="hidden absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 pointer-events-auto">
+        <div class="glass-panel max-w-2xl w-full rounded-2xl p-6 border-amber-500/40 flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center pb-3 border-b border-slate-800">
+                <h3 class="text-amber-400 font-bold text-lg title-font flex items-center gap-2">
+                    <i class="fa-solid fa-book"></i> Chapter 4: Story & Moral Lesson
+                </h3>
+                <button class="btn-close-modal text-slate-400 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-4 my-4 overflow-y-auto pr-2 text-slate-300 text-sm leading-relaxed">
+                <p><strong>Date:</strong> February 12, 2020</p>
+                <p><strong>Title:</strong> Go And Go Until You Die</p>
+                <p class="text-xs text-amber-400/80 italic">From the creations of Death Comes Alive And "The Rages Band"</p>
+                <hr class="border-slate-800">
+                <p>
+                    Once upon a time, two kids played near the backyard. Step Toe parents disciplined them, warning: 
+                    <em class="text-amber-300">"Always know the steps you will walk on your foot and also seeing around the holes... Don't step on it. Or you will 'Go And Go Until You Die'!"</em>
+                </p>
+                <p>
+                    When the parents left for Jakarta for work for 1 month, the spoiled kids disrespected the warnings and stepped into deep pit holes for fun. They fell into a massive dumpsite hole and perished.
+                </p>
+                <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200">
+                    <h4 class="font-bold text-amber-400 text-xs uppercase tracking-wider mb-1"><i class="fa-solid fa-lightbulb mr-1"></i> Moral Lesson</h4>
+                    <p class="text-xs italic">
+                        Always take care of your life as parents advise. If second chances are gone, life cannot be given back for good. Respect the path you walk!
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over / Victory Screen -->
+    <div id="modal-gameover" class="hidden absolute inset-0 z-40 flex items-center justify-center bg-black/90 backdrop-blur-lg p-4 pointer-events-auto">
+        <div class="glass-panel max-w-lg w-full rounded-2xl p-8 border-rose-500/50 text-center">
+            <div class="w-16 h-16 rounded-full bg-rose-500/20 border border-rose-500 text-rose-500 mx-auto flex items-center justify-center text-3xl mb-4 animate-pulse">
+                <i class="fa-solid fa-skull"></i>
+            </div>
+            <h2 id="gameover-title" class="title-font text-2xl font-black text-rose-500 mb-2">YOU FELL INTO THE HOLE!</h2>
+            <p id="gameover-desc" class="text-slate-300 text-sm mb-6 leading-relaxed">
+                You disrespected the parental warning and stepped directly into the dark dumpsite hole. Remember: life doesn't give a second chance once it's over!
+            </p>
+            <button onclick="location.reload()" class="glass-button px-8 py-3 rounded-xl text-amber-300 text-sm font-bold border-amber-500/50 bg-amber-500/20 hover:bg-amber-500/30">
+                <i class="fa-solid fa-rotate-right mr-2"></i> Try Again / Restart Chapter
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Synthesized Audio System using Web Audio API
+        class SoundFX {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            playJump() {
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.15);
+            }
+
+            playPickup() {
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                osc.frequency.setValueAtTime(600, this.ctx.currentTime + 0.08);
+                osc.frequency.setValueAtTime(800, this.ctx.currentTime + 0.16);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.25);
+            }
+
+            playHoleWarning() {
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(60, this.ctx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+
+            playHit() {
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(120, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.2);
+            }
+        }
+
+        const sfx = new SoundFX();
+
+        class GameEngine {
+            constructor() {
+                this.container = document.getElementById('canvas-container');
+                this.minimapCanvas = document.getElementById('minimap');
+                this.minimapCtx = this.minimapCanvas.getContext('2d');
+
+                // Game State & Stats
+                this.playerStats = {
+                    level: 1,
+                    hp: 100,
+                    maxHp: 100,
+                    stamina: 100,
+                    maxStamina: 100,
+                    xp: 0,
+                    maxXp: 100,
+                    sp: 1,
+                    speed: 0.18,
+                    jumpPower: 0.28
+                };
+
+                this.skills = {
+                    lightStep: false,
+                    highLeap: false,
+                    awareness: false
+                };
+
+                this.inventory = [
+                    { id: 'boots', name: 'Protective Boots', icon: 'fa-shoe-prints', desc: 'Increases step grip near holes.' }
+                ];
+
+                this.quests = [
+                    { id: 1, title: 'Talk to Parents', desc: 'Speak with Step Toe Parents before Jakarta departure.', target: 'Step Toe Parent', done: false },
+                    { id: 2, title: 'Explore Backyard Safely', desc: 'Navigate through backyard without falling into pit holes.', target: 'Backyard Gate', done: false },
+                    { id: 3, title: 'Collect Lost Toys', desc: 'Find 5 lost toys around Step Toe House.', target: 'Toys (0/5)', done: false, count: 0 },
+                    { id: 4, title: 'Memorial Tribute', desc: 'Reach the Cemetery site to pay respects.', target: 'Cemetery Shrine', done: false }
+                ];
+                this.currentQuestIdx = 0;
+
+                // Controls State
+                this.keys = {};
+                this.isFirstPerson = false;
+                this.mouseSensitivity = 0.002;
+                this.cameraYaw = 0;
+                this.cameraPitch = 0;
+                this.isMouseDown = false;
+                this.previousMousePosition = { x: 0, y: 0 };
+
+                // World Dynamic Entities
+                this.holes = [];
+                this.toys = [];
+                this.enemies = [];
+                this.npcs = [];
+                this.decorations = [];
+
+                this.init3D();
+                this.initWorld();
+                this.initEvents();
+                this.updateUI();
+                
+                this.animate = this.animate.bind(this);
+                requestAnimationFrame(this.animate);
+            }
+
+            init3D() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x0f172a);
+                this.scene.fog = new THREE.FogExp2(0x0f172a, 0.015);
+
+                this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+                
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.container.appendChild(this.renderer.domElement);
+
+                // Lighting
+                const ambientLight = new THREE.AmbientLight(0x94a3b8, 0.6);
+                this.scene.add(ambientLight);
+
+                const dirLight = new THREE.DirectionalLight(0xfef08a, 0.8);
+                dirLight.position.set(40, 60, 20);
+                dirLight.castShadow = true;
+                dirLight.shadow.mapSize.width = 2048;
+                dirLight.shadow.mapSize.height = 2048;
+                dirLight.shadow.camera.near = 0.5;
+                dirLight.shadow.camera.far = 200;
+                const d = 50;
+                dirLight.shadow.camera.left = -d;
+                dirLight.shadow.camera.right = d;
+                dirLight.shadow.camera.top = d;
+                dirLight.shadow.camera.bottom = -d;
+                this.scene.add(dirLight);
+
+                // Player Rig
+                this.playerMesh = new THREE.Group();
+                
+                // Body
+                const bodyGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.2, 8);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0284c7 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.6;
+                body.castShadow = true;
+                this.playerMesh.add(body);
+
+                // Head
+                const headGeo = new THREE.SphereGeometry(0.35, 16, 16);
+                const headMat = new THREE.MeshStandardMaterial({ color: 0xfde047 });
+                const head = new THREE.Mesh(headGeo, headMat);
+                head.position.y = 1.4;
+                head.castShadow = true;
+                this.playerMesh.add(head);
+
+                this.playerMesh.position.set(0, 0, 15);
+                this.scene.add(this.playerMesh);
+
+                this.playerVelocityY = 0;
+                this.isGrounded = true;
+            }
+
+            initWorld() {
+                // Ground Plane
+                const groundGeo = new THREE.PlaneGeometry(160, 160);
+                const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9, metalness: 0.1 });
+                const ground = new THREE.Mesh(groundGeo, groundMat);
+                ground.rotation.x = -Math.PI / 2;
+                ground.receiveShadow = true;
+                this.scene.add(ground);
+
+                // Step Toe House Structure
+                const houseGroup = new THREE.Group();
+                const houseGeo = new THREE.BoxGeometry(14, 8, 12);
+                const houseMat = new THREE.MeshStandardMaterial({ color: 0x334155 });
+                const houseMesh = new THREE.Mesh(houseGeo, houseMat);
+                houseMesh.position.set(0, 4, -10);
+                houseMesh.castShadow = true;
+                houseMesh.receiveShadow = true;
+                houseGroup.add(houseMesh);
+
+                // Roof
+                const roofGeo = new THREE.ConeGeometry(11, 4, 4);
+                const roofMat = new THREE.MeshStandardMaterial({ color: 0x991b1b });
+                const roof = new THREE.Mesh(roofGeo, roofMat);
+                roof.position.set(0, 10, -10);
+                roof.rotation.y = Math.PI / 4;
+                houseGroup.add(roof);
+
+                this.scene.add(houseGroup);
+
+                // Parent NPC
+                this.createNPC(0, 0, 5, "Step Toe Parent", 0xf59e0b);
+
+                // Cemetery Area (Back right)
+                this.createCemeterySection(40, 0, -40);
+
+                // Dumpsite Hole Hazard Zones & Dark Holes
+                const holePositions = [
+                    { x: -10, z: 2, radius: 2.2 },
+                    { x: 12, z: -5, radius: 2.8 },
+                    { x: -18, z: -25, radius: 3.5 },
+                    { x: 22, z: 15, radius: 2.5 },
+                    { x: 5, z: -35, radius: 4.0 }, // Dumpsite main hole
+                    { x: -30, z: 20, radius: 3.0 }
+                ];
+
+                holePositions.forEach((hp, idx) => {
+                    this.createHole(hp.x, hp.z, hp.radius, idx === 4);
+                });
+
+                // Scatter Lost Toys
+                const toyPositions = [
+                    { x: -12, z: 8 },
+                    { x: 15, z: -15 },
+                    { x: -25, z: -10 },
+                    { x: 30, z: -20 },
+                    { x: -5, z: -45 }
+                ];
+                toyPositions.forEach((tp, i) => this.createToy(tp.x, tp.z, `Lost Toy ${i+1}`));
+
+                // Spawn Shadow Monsters
+                this.spawnEnemy(-15, -20, "Hole Shadow");
+                this.spawnEnemy(8, -30, "Pit Monster");
+                this.spawnEnemy(25, -45, "Giant Dumpsite Spectre", true);
+
+                // Decorative Trees & Fences
+                for(let i=0; i<30; i++) {
+                    const tx = (Math.random() - 0.5) * 140;
+                    const tz = (Math.random() - 0.5) * 140;
+                    if(Math.hypot(tx, tz) > 15) {
+                        this.createTree(tx, tz);
+                    }
+                }
+            }
+
+            createHole(x, z, radius, isDumpsite = false) {
+                const geo = new THREE.CylinderGeometry(radius, radius, 4, 32, 1, true);
+                const mat = new THREE.MeshBasicMaterial({ color: 0x020617, side: THREE.DoubleSide });
+                const hole = new THREE.Mesh(geo, mat);
+                hole.position.set(x, -2, z);
+                this.scene.add(hole);
+
+                // Hole Rim / Glow Ring
+                const ringGeo = new THREE.RingGeometry(radius, radius + 0.4, 32);
+                const ringMat = new THREE.MeshBasicMaterial({ color: isDumpsite ? 0xd97706 : 0xef4444, side: THREE.DoubleSide });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.rotation.x = -Math.PI / 2;
+                ring.position.set(x, 0.02, z);
+                this.scene.add(ring);
+
+                this.holes.push({ x, z, radius, mesh: ring, isDumpsite });
+            }
+
+            createNPC(x, z, name, color) {
+                const group = new THREE.Group();
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.6, 8), new THREE.MeshStandardMaterial({ color }));
+                body.position.y = 0.8;
+                group.add(body);
+
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), new THREE.MeshStandardMaterial({ color: 0xffedd5 }));
+                head.position.y = 1.8;
+                group.add(head);
+
+                group.position.set(x, 0, z);
+                this.scene.add(group);
+                this.npcs.push({ x, z, name, mesh: group });
+            }
+
+            createCemeterySection(x, z) {
+                const group = new THREE.Group();
+                // Fence surround
+                const fenceGeo = new THREE.BoxGeometry(20, 1.5, 0.2);
+                const fenceMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
+                
+                const f1 = new THREE.Mesh(fenceGeo, fenceMat);
+                f1.position.set(x, 0.75, z - 10);
+                group.add(f1);
+
+                // Gravestones
+                for(let i = -8; i <= 8; i += 4) {
+                    const stone = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.4, 0.3), new THREE.MeshStandardMaterial({ color: 0x64748b }));
+                    stone.position.set(x + i, 0.7, z);
+                    group.add(stone);
+                }
+
+                // Memorial Shrine
+                const shrine = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2, 2.5, 8), new THREE.MeshStandardMaterial({ color: 0xd97706 }));
+                shrine.position.set(x, 1.25, z + 5);
+                group.add(shrine);
+
+                this.scene.add(group);
+                this.cemeteryPos = { x, z: z + 5 };
+            }
+
+            createToy(x, z, name) {
+                const geo = new THREE.DodecahedronGeometry(0.4);
+                const mat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, 0.5, z);
+                this.scene.add(mesh);
+                this.toys.push({ x, z, name, mesh, collected: false });
+            }
+
+            createTree(x, z) {
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 3), new THREE.MeshStandardMaterial({ color: 0x78350f }));
+                trunk.position.set(x, 1.5, z);
+                const foliage = new THREE.Mesh(new THREE.ConeGeometry(2, 4, 8), new THREE.MeshStandardMaterial({ color: 0x15803d }));
+                foliage.position.set(x, 4, z);
+                this.scene.add(trunk);
+                this.scene.add(foliage);
+            }
+
+            spawnEnemy(x, z, name, isBoss = false) {
+                const scale = isBoss ? 2.2 : 1.0;
+                const geo = new THREE.OctahedronGeometry(0.8 * scale);
+                const mat = new THREE.MeshStandardMaterial({ color: isBoss ? 0x881337 : 0x4c0519, emissive: 0xe11d48, wireframe: true });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, 1 * scale, z);
+                this.scene.add(mesh);
+                this.enemies.push({ x, z, name, mesh, hp: isBoss ? 150 : 40, maxHp: isBoss ? 150 : 40, isBoss, active: true });
+            }
+
+            initEvents() {
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+
+                document.addEventListener('keydown', (e) => {
+                    this.keys[e.code] = true;
+                    if (e.code === 'KeyV') this.toggleCamera();
+                    if (e.code === 'KeyI') this.toggleModal('modal-inventory');
+                    if (e.code === 'KeyK') this.toggleModal('modal-skills');
+                    if (e.code === 'KeyE') this.handleInteraction();
+                    if (e.code === 'Space') this.jump();
+                });
+
+                document.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                });
+
+                // Mouse look / Controls
+                document.addEventListener('mousedown', (e) => {
+                    if (e.target.tagName === 'CANVAS') {
+                        this.isMouseDown = true;
+                        this.previousMousePosition = { x: e.clientX, y: e.clientY };
+                    }
+                });
+
+                document.addEventListener('mouseup', () => this.isMouseDown = false);
+
+                document.addEventListener('mousemove', (e) => {
+                    if (!this.isMouseDown && !this.isFirstPerson) return;
+                    
+                    const deltaX = e.clientX - this.previousMousePosition.x;
+                    const deltaY = e.clientY - this.previousMousePosition.y;
+
+                    this.cameraYaw -= deltaX * this.mouseSensitivity;
+                    this.cameraPitch -= deltaY * this.mouseSensitivity;
+                    this.cameraPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, this.cameraPitch));
+
+                    this.previousMousePosition = { x: e.clientX, y: e.clientY };
+                });
+
+                // UI Button Bindings
+                document.getElementById('btn-camera').onclick = () => this.toggleCamera();
+                document.getElementById('btn-inventory').onclick = () => this.toggleModal('modal-inventory');
+                document.getElementById('btn-skills').onclick = () => this.toggleModal('modal-skills');
+                document.getElementById('btn-story').onclick = () => this.toggleModal('modal-story');
+                document.getElementById('btn-dialogue-next').onclick = () => this.nextDialogue();
+
+                document.querySelectorAll('.btn-close-modal').forEach(btn => {
+                    btn.onclick = () => {
+                        document.querySelectorAll('.absolute.z-30').forEach(m => m.classList.add('hidden'));
+                    };
+                });
+            }
+
+            toggleCamera() {
+                this.isFirstPerson = !this.isFirstPerson;
+                document.getElementById('crosshair').classList.toggle('hidden', !this.isFirstPerson);
+            }
+
+            toggleModal(id) {
+                const el = document.getElementById(id);
+                const isHidden = el.classList.contains('hidden');
+                document.querySelectorAll('.absolute.z-30').forEach(m => m.classList.add('hidden'));
+                if (isHidden) el.classList.remove('hidden');
+            }
+
+            jump() {
+                if (this.isGrounded && this.playerStats.stamina >= 15) {
+                    this.playerVelocityY = this.playerStats.jumpPower;
+                    this.isGrounded = false;
+                    this.playerStats.stamina -= 15;
+                    sfx.playJump();
+                    this.updateUI();
+                }
+            }
+
+            updatePlayer() {
+                // Movement Vector
+                let moveX = 0;
+                let moveZ = 0;
+
+                if (this.keys['KeyW'] || this.keys['ArrowUp']) moveZ -= 1;
+                if (this.keys['KeyS'] || this.keys['ArrowDown']) moveZ += 1;
+                if (this.keys['KeyA'] || this.keys['ArrowLeft']) moveX -= 1;
+                if (this.keys['KeyD'] || this.keys['ArrowRight']) moveX += 1;
+
+                if (moveX !== 0 || moveZ !== 0) {
+                    const len = Math.hypot(moveX, moveZ);
+                    moveX /= len;
+                    moveZ /= len;
+
+                    // Rotate relative to Camera Yaw
+                    const sin = Math.sin(this.cameraYaw);
+                    const cos = Math.cos(this.cameraYaw);
+
+                    const vx = (moveX * cos - moveZ * sin) * this.playerStats.speed;
+                    const vz = (moveX * sin + moveZ * cos) * this.playerStats.speed;
+
+                    this.playerMesh.position.x += vx;
+                    this.playerMesh.position.z += vz;
+
+                    // Rotate Player model to facing direction
+                    if (!this.isFirstPerson) {
+                        this.playerMesh.rotation.y = Math.atan2(-vx, -vz);
+                    }
+                }
+
+                // Gravity & Jump Physics
+                this.playerMesh.position.y += this.playerVelocityY;
+                if (this.playerMesh.position.y > 0) {
+                    this.playerVelocityY -= 0.015; // Gravity
+                    this.isGrounded = false;
+                } else {
+                    this.playerMesh.position.y = 0;
+                    this.playerVelocityY = 0;
+                    this.isGrounded = true;
+                }
+
+                // Stamina Regeneration
+                if (this.playerStats.stamina < this.playerStats.maxStamina) {
+                    this.playerStats.stamina = Math.min(this.playerStats.maxStamina, this.playerStats.stamina + 0.15);
+                    this.updateUI();
+                }
+
+                // Check Hole Danger Collisions
+                this.checkHoleHazards();
+
+                // Camera Position Updating
+                if (this.isFirstPerson) {
+                    this.playerMesh.rotation.y = this.cameraYaw;
+                    this.camera.position.set(
+                        this.playerMesh.position.x,
+                        this.playerMesh.position.y + 1.4,
+                        this.playerMesh.position.z
+                    );
+                    this.camera.rotation.set(this.cameraPitch, this.cameraYaw, 0, 'YXZ');
+                } else {
+                    const dist = 6;
+                    const cx = this.playerMesh.position.x + dist * Math.sin(this.cameraYaw) * Math.cos(this.cameraPitch);
+                    const cy = this.playerMesh.position.y + 1.6 + dist * Math.sin(this.cameraPitch);
+                    const cz = this.playerMesh.position.z + dist * Math.cos(this.cameraYaw) * Math.cos(this.cameraPitch);
+
+                    this.camera.position.set(cx, cy, cz);
+                    this.camera.lookAt(
+                        this.playerMesh.position.x,
+                        this.playerMesh.position.y + 1.2,
+                        this.playerMesh.position.z
+                    );
+                }
+
+                this.checkPrompts();
+            }
+
+            checkHoleHazards() {
+                const px = this.playerMesh.position.x;
+                const pz = this.playerMesh.position.z;
+
+                for (let hole of this.holes) {
+                    const dist = Math.hypot(px - hole.x, pz - hole.z);
+                    if (dist < hole.radius) {
+                        // Fall into hole!
+                        sfx.playHoleWarning();
+                        this.triggerGameOver(hole.isDumpsite);
+                        break;
+                    } else if (dist < hole.radius + 1.5) {
+                        // Near hazard warning
+                        if (Math.random() < 0.05) sfx.playHoleWarning();
+                    }
+                }
+            }
+
+            checkPrompts() {
+                const prompt = document.getElementById('action-prompt');
+                const promptText = document.getElementById('prompt-text');
+                let near = false;
+
+                const px = this.playerMesh.position.x;
+                const pz = this.playerMesh.position.z;
+
+                // Check NPC
+                for (let npc of this.npcs) {
+                    if (Math.hypot(px - npc.x, pz - npc.z) < 3.0) {
+                        promptText.innerText = `Talk to ${npc.name}`;
+                        prompt.classList.remove('hidden');
+                        near = true;
+                        break;
+                    }
+                }
+
+                // Check Toys
+                if (!near) {
+                    for (let toy of this.toys) {
+                        if (!toy.collected && Math.hypot(px - toy.x, pz - toy.z) < 2.0) {
+                            promptText.innerText = `Pick up ${toy.name}`;
+                            prompt.classList.remove('hidden');
+                            near = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Check Cemetery
+                if (!near && this.cemeteryPos && Math.hypot(px - this.cemeteryPos.x, pz - this.cemeteryPos.z) < 4.0) {
+                    if (this.currentQuestIdx === 3) {
+                        promptText.innerText = "Pay Respects at Shrine";
+                        prompt.classList.remove('hidden');
+                        near = true;
+                    }
+                }
+
+                if (!near) prompt.classList.add('hidden');
+            }
+
+            handleInteraction() {
+                const px = this.playerMesh.position.x;
+                const pz = this.playerMesh.position.z;
+
+                // NPC Dialogue
+                for (let npc of this.npcs) {
+                    if (Math.hypot(px - npc.x, pz - npc.z) < 3.0) {
+                        this.startDialogue(npc.name);
+                        return;
+                    }
+                }
+
+                // Toy Pickup
+                for (let toy of this.toys) {
+                    if (!toy.collected && Math.hypot(px - toy.x, pz - toy.z) < 2.0) {
+                        toy.collected = true;
+                        this.scene.remove(toy.mesh);
+                        sfx.playPickup();
+                        
+                        this.inventory.push({ id: `toy-${Date.now()}`, name: toy.name, icon: 'fa-robot', desc: 'A lost toy scattered in the yard.' });
+                        this.addXP(25);
+                        
+                        // Update quest 3
+                        const q3 = this.quests[2];
+                        q3.count = (q3.count || 0) + 1;
+                        q3.target = `Toys (${q3.count}/5)`;
+                        if (q3.count >= 5) {
+                            q3.done = true;
+                        }
+                        this.updateUI();
+                        return;
+                    }
+                }
+
+                // Cemetery Shrine Quest
+                if (this.cemeteryPos && Math.hypot(px - this.cemeteryPos.x, pz - this.cemeteryPos.z) < 4.0) {
+                    if (this.currentQuestIdx === 3) {
+                        this.quests[3].done = true;
+                        this.addXP(100);
+                        alert("You paid your deep respects at the Step Toe Memorial Site. Chapter Complete!");
+                        this.updateUI();
+                    }
+                }
+            }
+
+            startDialogue(speaker) {
+                document.getElementById('dialogue-speaker').innerText = speaker;
+                document.getElementById('dialogue-text').innerText = 
+                    '"You there kids around the backyard, I want you to discipline yourself! If you want to walk or run in near or far places, ALWAYS know the steps you will walk on your foot and see around the holes. Don\'t step on it... OR YOU WILL GO AND GO UNTIL YOU DIE!"';
+                document.getElementById('modal-dialogue').classList.remove('hidden');
+
+                if (this.currentQuestIdx === 0) {
+                    this.quests[0].done = true;
+                    this.currentQuestIdx = 1;
+                    this.addXP(30);
+                    this.updateUI();
+                }
+            }
+
+            nextDialogue() {
+                document.getElementById('modal-dialogue').classList.add('hidden');
+            }
+
+            addXP(amount) {
+                this.playerStats.xp += amount;
+                if (this.playerStats.xp >= this.playerStats.maxXp) {
+                    this.playerStats.level++;
+                    this.playerStats.xp -= this.playerStats.maxXp;
+                    this.playerStats.maxXp += 50;
+                    this.playerStats.sp++;
+                    this.playerStats.maxHp += 20;
+                    this.playerStats.hp = this.playerStats.maxHp;
+                    sfx.playPickup();
+                }
+                this.updateUI();
+            }
+
+            unlockSkill(skillKey) {
+                if (this.playerStats.sp >= 1 && !this.skills[skillKey]) {
+                    this.playerStats.sp--;
+                    this.skills[skillKey] = true;
+
+                    if (skillKey === 'highLeap') this.playerStats.jumpPower = 0.38;
+                    if (skillKey === 'awareness') {
+                        this.holes.forEach(h => h.mesh.material.color.setHex(0xf59e0b));
+                    }
+
+                    sfx.playPickup();
+                    this.updateUI();
+                    
+                    const btn = document.getElementById(`skill-${skillKey.toLowerCase()}-btn`);
+                    if (btn) {
+                        btn.innerText = "UNLOCKED";
+                        btn.disabled = true;
+                        btn.classList.add('opacity-50');
+                    }
+                }
+            }
+
+            triggerGameOver(isDumpsite) {
+                sfx.playHit();
+                const modal = document.getElementById('modal-gameover');
+                const title = document.getElementById('gameover-title');
+                const desc = document.getElementById('gameover-desc');
+
+                if (isDumpsite) {
+                    title.innerText = "FELL INTO THE DUMPSITE HOLE!";
+                    desc.innerText = "You disrespected the parental warning and fell into the massive dumpsite pit. Your parents returned from Jakarta only to find the tragedy. Life cannot give a 2nd chance!";
+                } else {
+                    title.innerText = "STEPPED INTO A DARK PIT!";
+                    desc.innerText = "You failed to watch your footing and fell deep into a backyard hole hazard. 'Go And Go Until You Die!'";
+                }
+
+                modal.classList.remove('hidden');
+            }
+
+            updateUI() {
+                document.getElementById('player-level').innerText = this.playerStats.level;
+                document.getElementById('hp-val').innerText = Math.round(this.playerStats.hp);
+                document.getElementById('hp-max').innerText = this.playerStats.maxHp;
+                document.getElementById('hp-bar').style.width = `${(this.playerStats.hp / this.playerStats.maxHp) * 100}%`;
+
+                document.getElementById('stamina-val').innerText = Math.round(this.playerStats.stamina);
+                document.getElementById('stamina-max').innerText = this.playerStats.maxStamina;
+                document.getElementById('stamina-bar').style.width = `${(this.playerStats.stamina / this.playerStats.maxStamina) * 100}%`;
+
+                document.getElementById('xp-val').innerText = this.playerStats.xp;
+                document.getElementById('xp-max').innerText = this.playerStats.maxXp;
+                document.getElementById('xp-bar').style.width = `${(this.playerStats.xp / this.playerStats.maxXp) * 100}%`;
+
+                document.getElementById('sp-count').innerText = this.playerStats.sp;
+
+                // Active Quest UI
+                const activeQ = this.quests[this.currentQuestIdx] || this.quests[0];
+                document.getElementById('quest-title').innerText = activeQ.title;
+                document.getElementById('quest-desc').innerText = activeQ.desc;
+                document.getElementById('quest-target').innerText = activeQ.target;
+
+                // Inventory Grid UI
+                const grid = document.getElementById('inventory-grid');
+                grid.innerHTML = '';
+                this.inventory.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = "glass-panel p-3 rounded-xl flex flex-col items-center text-center border-slate-800";
+                    card.innerHTML = `
+                        <div class="text-amber-400 text-2xl mb-2"><i class="fa-solid ${item.icon}"></i></div>
+                        <h5 class="font-bold text-xs text-slate-200">${item.name}</h5>
+                        <p class="text-[10px] text-slate-400 mt-1">${item.desc}</p>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+
+            renderMinimap() {
+                const ctx = this.minimapCtx;
+                const w = this.minimapCanvas.width;
+                const h = this.minimapCanvas.height;
+                const scale = 1.2;
+
+                ctx.clearRect(0, 0, w, h);
+
+                // Center around Player
+                const px = this.playerMesh.position.x;
+                const pz = this.playerMesh.position.z;
+
+                // Draw Hole Markers (Red / Amber)
+                this.holes.forEach(hole => {
+                    const mx = w / 2 + (hole.x - px) * scale;
+                    const my = h / 2 + (hole.z - pz) * scale;
+
+                    ctx.beginPath();
+                    ctx.arc(mx, my, hole.radius * scale, 0, Math.PI * 2);
+                    ctx.fillStyle = hole.isDumpsite ? 'rgba(217, 119, 6, 0.6)' : 'rgba(239, 68, 68, 0.6)';
+                    ctx.fill();
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.stroke();
+                });
+
+                // Draw NPCs (Green)
+                this.npcs.forEach(npc => {
+                    const mx = w / 2 + (npc.x - px) * scale;
+                    const my = h / 2 + (npc.z - pz) * scale;
+
+                    ctx.beginPath();
+                    ctx.arc(mx, my, 4, 0, Math.PI * 2);
+                    ctx.fillStyle = '#10b981';
+                    ctx.fill();
+                });
+
+                // Draw Toys (Sky Blue)
+                this.toys.forEach(toy => {
+                    if (!toy.collected) {
+                        const mx = w / 2 + (toy.x - px) * scale;
+                        const my = h / 2 + (toy.z - pz) * scale;
+
+                        ctx.beginPath();
+                        ctx.arc(mx, my, 3, 0, Math.PI * 2);
+                        ctx.fillStyle = '#38bdf8';
+                        ctx.fill();
+                    }
+                });
+
+                // Draw Player Marker (Amber Pointer Center)
+                ctx.beginPath();
+                ctx.arc(w / 2, h / 2, 5, 0, Math.PI * 2);
+                ctx.fillStyle = '#f59e0b';
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+
+            animate() {
+                requestAnimationFrame(this.animate);
+
+                this.updatePlayer();
+
+                // Rotate Toy Items
+                this.toys.forEach(toy => {
+                    if (toy.mesh) toy.mesh.rotation.y += 0.03;
+                });
+
+                // Animate Enemies
+                this.enemies.forEach(enemy => {
+                    if (enemy.mesh) {
+                        enemy.mesh.rotation.x += 0.02;
+                        enemy.mesh.rotation.y += 0.02;
+                    }
+                });
+
+                this.renderMinimap();
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        // Initialize Game Engine when Window loads
+        window.onload = () => {
+            window.game = new GameEngine();
+        };
+    </script>
+</body>
+</html>
